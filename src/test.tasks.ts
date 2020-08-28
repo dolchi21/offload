@@ -3,3 +3,4 @@ export const task0 = (data: any) => {
     //@ts-ignore
     return axios.get(data).then(res => res.data)
 }
+export const echo = (data: any) => data

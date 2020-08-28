@@ -8,9 +8,6 @@ function send(process: ChildProcess, action: Action) {
     const onMessage = (data: any) => {
         const { type, payload, uuid } = data
         switch (type) {
-            case 'LOG': {
-                return console.log('CHILD.log', payload)
-            }
             case 'ERROR': {
                 const err = new Error()
                 err.name = payload.name
@@ -19,6 +16,9 @@ function send(process: ChildProcess, action: Action) {
                 return ee.emit('ERROR:' + uuid, err)
             }
             case RESPONSE: {
+                if (payload && payload.type && payload.type === 'Buffer' && Array.isArray(payload.data)) {
+                    return ee.emit('RESPONSE:' + uuid, Buffer.from(payload))
+                }
                 return ee.emit('RESPONSE:' + uuid, payload)
             }
         }
@@ -37,18 +37,27 @@ function send(process: ChildProcess, action: Action) {
     return p
 }
 
-export async function offload(fn: any) {
+export async function offload(fn: any, options?: any) {
     const state = {
         closed: false
     }
     const childJS = __dirname + '/child'
     const cp = fork(childJS)
+    cp.on('message', (data: any) => {
+        const { type, payload, uuid } = data
+        switch (type) {
+            case 'LOG': {
+                if (options && options.logging) return options.logging(payload)
+            }
+        }
+    })
     await send(cp, setMain(fn))
     const caller = (data: any) => {
         if (state.closed) throw new Error('ProcessClosed')
         const action = exec(data)
         return send(cp, action)
     }
+    caller.process = cp
     caller.exit = () => {
         state.closed = true
         send(cp, exit())
