@@ -1,15 +1,12 @@
-import { fork } from 'child_process'
+import { fork, ChildProcess } from 'child_process'
 import * as events from 'events'
 
-export function offload(fn: any) {
+import { exec, setMain, Action, exit, RESPONSE } from './childActions'
+
+function send(process: ChildProcess, action: Action) {
     const ee = new events.EventEmitter()
-    const state = {
-        main: fn.toString(),
-        startedAt: Date.now()
-    }
-    const childJS = __dirname + '/child'
-    const cp = fork(childJS)
-    cp.on('message', (data: any) => {
+    const onMessage = (data: any) => {
+        console.log(JSON.stringify([action.type, data.type, data.uuid, data.payload]))
         const { type, payload, uuid } = data
         switch (type) {
             case 'ERROR': {
@@ -17,21 +14,42 @@ export function offload(fn: any) {
                 err.name = payload.name
                 err.message = payload.message
                 err.stack = payload.stack
-                return ee.emit('error:' + uuid, err)
+                return ee.emit('ERROR:' + uuid, err)
             }
-            case 'RESULT': return ee.emit('response:' + uuid, payload)
+            case RESPONSE: {
+                return ee.emit('RESPONSE:' + uuid, payload)
+            }
         }
-        console.log('child', payload)
+    }
+    process.on('message', onMessage)
+    const p = new Promise((resolve, reject) => {
+        ee.once('RESPONSE:' + action.uuid, data => resolve(data))
+        ee.once('ERROR:' + action.uuid, err => reject(err))
+        process.send(action, err => {
+            if (err) return reject(err)
+        })
     })
-    cp.send({ type: 'MAIN', payload: state.main })
-    return (data: any) => new Promise((resolve, reject) => {
-        try {
-            const uuid = [state.startedAt, Date.now()].join('/')
-            ee.once('response:' + uuid, data => resolve(data))
-            ee.once('error:' + uuid, data => reject(data))
-            cp.send({ type: 'EXEC', payload: data, uuid })
-        } catch (err) {
-            reject(err)
-        }
+    p.catch(err => null).then(() => {
+        process.removeListener('message', onMessage)
     })
+    return p
+}
+
+export async function offload(fn: any) {
+    const state = {
+        closed: false
+    }
+    const childJS = __dirname + '/child'
+    const cp = fork(childJS)
+    await send(cp, setMain(fn))
+    const caller = (data: any) => {
+        if (state.closed) throw new Error('ProcessClosed')
+        const action = exec(data)
+        return send(cp, action)
+    }
+    caller.exit = () => {
+        state.closed = true
+        send(cp, exit())
+    }
+    return caller
 }

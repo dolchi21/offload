@@ -1,5 +1,7 @@
 import fs from 'fs'
 
+import { EXEC, MAIN, EXIT, RESPONSE } from './childActions'
+
 async function log(data: any) {
     const str = JSON.stringify(data)
     fs.appendFileSync('child.log', [new Date().toISOString(), str, '\n'].join('|'))
@@ -13,17 +15,24 @@ fs.unlinkSync('child.log')
 log({ type: 'init' })
 let main: any = async () => null
 
+function executeMain(args: any) {
+    try {
+        return Promise.resolve(main(args))
+    } catch (err) {
+        return Promise.reject(err)
+    }
+}
+
 process.on('message', async data => {
     log({ type: 'message', data })
     switch (data.type) {
         case 'ECHO': {
             return send({ type: 'ECHO', payload: data })
         }
-        case 'EXEC': {
+        case EXEC: {
             const { uuid } = data
-            return Promise.resolve(main(data.payload)).then((payload: any) => {
-                send({ type: 'RESULT', payload, uuid })
-                process.exit(0)
+            return executeMain(data.payload).then((payload: any) => {
+                send({ type: RESPONSE, payload, uuid })
             }).catch(err => {
                 const error: any = {
                     name: err.name,
@@ -31,13 +40,15 @@ process.on('message', async data => {
                     stack: err.stack,
                 }
                 send({ type: 'ERROR', payload: error, uuid })
-                process.exit(1)
             })
         }
-        case 'MAIN': {
-            const fn = eval(data.payload)
-            main = fn
-            return
+        case EXIT: {
+            return process.exit(0)
+        }
+        case MAIN: {
+            const { uuid } = data
+            main = eval(data.payload)
+            return send({ type: RESPONSE, uuid })
         }
     }
 })

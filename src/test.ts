@@ -1,19 +1,19 @@
+import * as uuid from 'uuid'
 import { offload } from './'
 
 async function main() {
-    const worker = offload(async (data: string) => {
+    const worker = await offload((data: string) => {
         const fs = require('fs')
         fs.writeFileSync('worker.log', [Date.now(), JSON.stringify(data)].join('|'))
-        throw new Error('Unknown')
-        return data.split('')
+        return data
     })
-    const ret = await worker('asd2' + Date.now()).catch(err => {
-        console.log(err)
-    })
-    const ret2 = await worker('asd2' + Date.now()).catch(err=>{
-        console.log(err)
-    })
-    console.log(JSON.stringify({ ret, ret2 }))
+    const ret0 = await worker(uuid.v4())
+    console.log(ret0)
+    await worker.exit()
+    const ret1 = await worker(uuid.v4())
+    console.log(ret1)
 }
 
-main()
+main().catch(err => {
+    console.log(err)
+})
