@@ -1,18 +1,13 @@
-import fs from 'fs'
-
 import { EXEC, MAIN, EXIT, RESPONSE } from './childActions'
-
-async function log(data: any) {
-    const str = JSON.stringify(data)
-    fs.appendFileSync('child.log', [new Date().toISOString(), str, '\n'].join('|'))
-}
 
 function send(data: any) {
     if (process.send) process.send(data)
 }
+async function log(data: any) {
+    send({ type: 'LOG', payload: data })
+}
 
-fs.unlinkSync('child.log')
-log({ type: 'init' })
+log({ type: 'init', pid: process.pid })
 let main: any = async () => null
 
 function executeMain(args: any) {
@@ -24,7 +19,6 @@ function executeMain(args: any) {
 }
 
 process.on('message', async data => {
-    log({ type: 'message', data })
     switch (data.type) {
         case 'ECHO': {
             return send({ type: 'ECHO', payload: data })

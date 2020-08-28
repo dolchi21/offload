@@ -6,9 +6,11 @@ import { exec, setMain, Action, exit, RESPONSE } from './childActions'
 function send(process: ChildProcess, action: Action) {
     const ee = new events.EventEmitter()
     const onMessage = (data: any) => {
-        console.log(JSON.stringify([action.type, data.type, data.uuid, data.payload]))
         const { type, payload, uuid } = data
         switch (type) {
+            case 'LOG': {
+                return console.log('CHILD.log', payload)
+            }
             case 'ERROR': {
                 const err = new Error()
                 err.name = payload.name

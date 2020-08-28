@@ -1,17 +1,16 @@
-import * as uuid from 'uuid'
+import * as Tasks from './test.tasks'
 import { offload } from './'
 
 async function main() {
-    const worker = await offload((data: string) => {
-        const fs = require('fs')
-        fs.writeFileSync('worker.log', [Date.now(), JSON.stringify(data)].join('|'))
-        return data
-    })
-    const ret0 = await worker(uuid.v4())
-    console.log(ret0)
-    await worker.exit()
-    const ret1 = await worker(uuid.v4())
-    console.log(ret1)
+    console.log('master.pid', process.pid)
+    const worker = await offload(Tasks.task0)
+    const tasks = [
+        'https://google.com',
+        'https://facebook.com'
+    ].map(url => worker(url))
+    const ret = await Promise.all(tasks)
+    console.log(ret)
+    worker.exit()
 }
 
 main().catch(err => {
